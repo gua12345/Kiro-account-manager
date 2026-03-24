@@ -762,6 +762,17 @@ interface KiroApi {
 
   // 发送关闭确认对话框响应
   sendCloseConfirmResponse: (action: 'minimize' | 'quit' | 'cancel', rememberChoice: boolean) => void
+
+  // ============ 自定义浏览器路径 ============
+
+  // 获取自定义浏览器路径
+  getCustomBrowserPath: () => Promise<string>
+
+  // 设置自定义浏览器路径
+  setCustomBrowserPath: (path: string) => Promise<{ success: boolean; error?: string }>
+
+  // 使用自定义浏览器打开 URL
+  openWithCustomBrowser: (url: string, browserPath?: string) => Promise<{ success: boolean; error?: string }>
 }
 
 declare global {

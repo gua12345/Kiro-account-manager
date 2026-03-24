@@ -165,7 +165,6 @@ export function SettingsPage() {
   // 自定义浏览器路径状态
   const [customBrowserPath, setCustomBrowserPath] = useState('')
   const [savedCustomBrowserPath, setSavedCustomBrowserPath] = useState('')
-  const [customBrowserPathLoading, setCustomBrowserPathLoading] = useState(true)
 
   // 加载自定义浏览器路径
   useEffect(() => {
@@ -176,8 +175,6 @@ export function SettingsPage() {
         setSavedCustomBrowserPath(path || '')
       } catch (error) {
         console.error('Failed to load custom browser path:', error)
-      } finally {
-        setCustomBrowserPathLoading(false)
       }
     }
     loadCustomBrowserPath()

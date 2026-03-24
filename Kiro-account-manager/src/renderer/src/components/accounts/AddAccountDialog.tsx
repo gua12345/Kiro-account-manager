@@ -3,7 +3,7 @@ import { Button, Card, CardContent, CardHeader, CardTitle, Input, Label } from '
 import { useAccountsStore } from '@/store/accounts'
 import { useTranslation } from '@/hooks/useTranslation'
 import type { SubscriptionType } from '@/types/account'
-import { X, Loader2, Download, Copy, Check, ExternalLink, Info, EyeOff } from 'lucide-react'
+import { X, Loader2, Download, Copy, Check, ExternalLink, Info, EyeOff, Globe } from 'lucide-react'
 
 interface AddAccountDialogProps {
   isOpen: boolean
