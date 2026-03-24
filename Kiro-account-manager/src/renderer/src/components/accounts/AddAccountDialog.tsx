@@ -60,7 +60,7 @@ type ImportMode = 'oidc' | 'sso' | 'login'
 type LoginType = 'builderid' | 'google' | 'github' | 'iamsso'
 
 export function AddAccountDialog({ isOpen, onClose }: AddAccountDialogProps): React.ReactNode {
-  const { addAccount, accounts, batchImportConcurrency, loginPrivateMode } = useAccountsStore()
+  const { addAccount, accounts, batchImportConcurrency } = useAccountsStore()
 
   // 检查账户是否已存在（同userId 或 同邮箱+同provider 才算重复）
   const isAccountExists = (email: string, userId: string, provider?: string): boolean => {
@@ -107,7 +107,6 @@ export function AddAccountDialog({ isOpen, onClose }: AddAccountDialogProps): Re
   // 登录相关状态
   const [loginType, setLoginType] = useState<LoginType>('builderid')
   const [isLoggingIn, setIsLoggingIn] = useState(false)
-  const [usePrivateMode, setUsePrivateMode] = useState(loginPrivateMode) // 临时隐私模式开关，默认跟随全局设置
   const [builderIdLoginData, setBuilderIdLoginData] = useState<{
     userCode: string
     verificationUri: string
@@ -125,6 +124,48 @@ export function AddAccountDialog({ isOpen, onClose }: AddAccountDialogProps): Re
     expiresIn: number
     interval: number
   } | null>(null)
+
+  // 浏览器选择相关状态
+  type BrowserMode = 'system' | 'private' | 'custom'
+  const [browserMode, setBrowserMode] = useState<BrowserMode>('system')
+  const [customBrowserPath, setCustomBrowserPath] = useState('')
+
+  // 加载自定义浏览器路径
+  useEffect(() => {
+    const loadCustomBrowserPath = async () => {
+      try {
+        const path = await window.api.getCustomBrowserPath()
+        setCustomBrowserPath(path || '')
+        // 如果有自定义浏览器路径，默认选中"自定义浏览器"
+        if (path) {
+          setBrowserMode('custom')
+        }
+      } catch (error) {
+        console.error('Failed to load custom browser path:', error)
+      }
+    }
+    loadCustomBrowserPath()
+  }, [])
+
+  // 打开浏览器的辅助函数
+  const openBrowser = async (url: string) => {
+    if (browserMode === 'custom') {
+      if (!customBrowserPath) {
+        setError(isEn ? 'Custom browser path not configured. Please set it in Settings.' : '自定义浏览器路径未配置，请先在设置中配置')
+        return false
+      }
+      const result = await window.api.openWithCustomBrowser(url, customBrowserPath)
+      if (!result.success) {
+        setError(result.error || (isEn ? 'Failed to open custom browser' : '打开自定义浏览器失败'))
+        return false
+      }
+    } else if (browserMode === 'private') {
+      window.api.openExternal(url, true)
+    } else {
+      window.api.openExternal(url, false)
+    }
+    return true
+  }
 
   // 清理轮询
   useEffect(() => {
@@ -284,8 +325,8 @@ export function AddAccountDialog({ isOpen, onClose }: AddAccountDialogProps): Re
           interval: result.interval || 5
         })
 
-        // 打开浏览器（支持隐私模式）
-        window.api.openExternal(result.verificationUri, usePrivateMode)
+        // 打开浏览器（根据选择的模式）
+        await openBrowser(result.verificationUri)
 
         // 开始轮询
         startPolling(result.interval || 5)
@@ -322,8 +363,8 @@ export function AddAccountDialog({ isOpen, onClose }: AddAccountDialogProps): Re
           interval: 3
         })
 
-        // 打开浏览器（支持隐私模式）
-        window.api.openExternal(result.authorizeUrl, usePrivateMode)
+        // 打开浏览器（根据选择的模式）
+        await openBrowser(result.authorizeUrl)
 
         // 开始轮询（等待服务器回调自动完成 token 交换）
         startIamSsoPolling(3)
@@ -459,7 +500,8 @@ export function AddAccountDialog({ isOpen, onClose }: AddAccountDialogProps): Re
     setError(null)
 
     try {
-      const result = await window.api.startSocialLogin(socialProvider, usePrivateMode)
+      // 社交登录使用 Electron 内置窗口，仅支持隐私模式开关
+      const result = await window.api.startSocialLogin(socialProvider, browserMode === 'private')
       
       if (!result.success) {
         setError(result.error || '启动登录失败')
@@ -1021,10 +1063,10 @@ export function AddAccountDialog({ isOpen, onClose }: AddAccountDialogProps): Re
                   </div>
                   
                   <div className="flex gap-2">
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       className="flex-1"
-                      onClick={() => window.api.openExternal(builderIdLoginData.verificationUri, usePrivateMode)}
+                      onClick={() => openBrowser(builderIdLoginData.verificationUri)}
                     >
                       <ExternalLink className="h-4 w-4 mr-2" />
                       {isEn ? 'Open Browser' : '重新打开浏览器'}
@@ -1076,37 +1118,92 @@ export function AddAccountDialog({ isOpen, onClose }: AddAccountDialogProps): Re
                     </p>
                   </div>
 
-                  {/* 隐私模式选项 */}
+                  {/* 浏览器选择 */}
                   <div className="px-2">
-                    <button
-                      type="button"
-                      onClick={() => setUsePrivateMode(!usePrivateMode)}
-                      className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border transition-all duration-200 ${
-                        usePrivateMode 
-                          ? 'bg-primary/5 border-primary/30 hover:bg-primary/10' 
-                          : 'bg-muted/30 border-transparent hover:bg-muted/50'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
+                    <div className="mb-2">
+                      <p className="text-sm font-medium text-muted-foreground">{isEn ? 'Browser Selection' : '浏览器选择'}</p>
+                    </div>
+                    <div className="space-y-2">
+                      {/* 系统默认浏览器 */}
+                      <button
+                        type="button"
+                        onClick={() => setBrowserMode('system')}
+                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all duration-200 ${
+                          browserMode === 'system'
+                            ? 'bg-primary/5 border-primary/30 hover:bg-primary/10'
+                            : 'bg-muted/30 border-transparent hover:bg-muted/50'
+                        }`}
+                      >
                         <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
-                          usePrivateMode ? 'bg-primary/20' : 'bg-muted'
+                          browserMode === 'system' ? 'bg-primary/20' : 'bg-muted'
                         }`}>
-                          <EyeOff className={`w-4 h-4 ${usePrivateMode ? 'text-primary' : 'text-muted-foreground'}`} />
+                          <Globe className={`w-4 h-4 ${browserMode === 'system' ? 'text-primary' : 'text-muted-foreground'}`} />
                         </div>
-                        <span className={`text-sm font-medium ${usePrivateMode ? 'text-foreground' : 'text-muted-foreground'}`}>
+                        <span className={`text-sm font-medium ${browserMode === 'system' ? 'text-foreground' : 'text-muted-foreground'}`}>
+                          {isEn ? 'System Default Browser' : '系统默认浏览器'}
+                        </span>
+                      </button>
+
+                      {/* 隐私模式浏览器 */}
+                      <button
+                        type="button"
+                        onClick={() => setBrowserMode('private')}
+                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all duration-200 ${
+                          browserMode === 'private'
+                            ? 'bg-primary/5 border-primary/30 hover:bg-primary/10'
+                            : 'bg-muted/30 border-transparent hover:bg-muted/50'
+                        }`}
+                      >
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
+                          browserMode === 'private' ? 'bg-primary/20' : 'bg-muted'
+                        }`}>
+                          <EyeOff className={`w-4 h-4 ${browserMode === 'private' ? 'text-primary' : 'text-muted-foreground'}`} />
+                        </div>
+                        <span className={`text-sm font-medium ${browserMode === 'private' ? 'text-foreground' : 'text-muted-foreground'}`}>
                           {isEn ? 'Private/Incognito Mode' : '隐私/无痕模式'}
                         </span>
-                      </div>
-                      <div className={`w-10 h-6 rounded-full p-1 transition-colors ${
-                        usePrivateMode ? 'bg-primary' : 'bg-muted-foreground/30'
-                      }`}>
-                        <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${
-                          usePrivateMode ? 'translate-x-4' : 'translate-x-0'
-                        }`} />
-                      </div>
-                    </button>
+                      </button>
+
+                      {/* 自定义浏览器 */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (customBrowserPath) {
+                            setBrowserMode('custom')
+                          } else {
+                            setError(isEn ? 'Custom browser path not configured. Please set it in Settings.' : '自定义浏览器路径未配置，请先在设置中配置')
+                          }
+                        }}
+                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all duration-200 ${
+                          browserMode === 'custom'
+                            ? 'bg-primary/5 border-primary/30 hover:bg-primary/10'
+                            : 'bg-muted/30 border-transparent hover:bg-muted/50'
+                        } ${!customBrowserPath ? 'opacity-50' : ''}`}
+                      >
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
+                          browserMode === 'custom' ? 'bg-primary/20' : 'bg-muted'
+                        }`}>
+                          <ExternalLink className={`w-4 h-4 ${browserMode === 'custom' ? 'text-primary' : 'text-muted-foreground'}`} />
+                        </div>
+                        <div className="flex flex-col items-start">
+                          <span className={`text-sm font-medium ${browserMode === 'custom' ? 'text-foreground' : 'text-muted-foreground'}`}>
+                            {isEn ? 'Custom Browser' : '自定义浏览器'}
+                          </span>
+                          {customBrowserPath && (
+                            <span className="text-xs text-muted-foreground truncate max-w-[200px]">
+                              {customBrowserPath.split(/[/\\]/).pop()}
+                            </span>
+                          )}
+                          {!customBrowserPath && (
+                            <span className="text-xs text-amber-500">
+                              {isEn ? 'Configure in Settings' : '需在设置中配置'}
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    </div>
                   </div>
-                  
+
                   <div className="space-y-3 px-2">
                     {/* Google */}
                     <button 

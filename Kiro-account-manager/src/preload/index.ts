@@ -1021,6 +1021,23 @@ const api = {
   // 发送关闭确认对话框响应
   sendCloseConfirmResponse: (action: 'minimize' | 'quit' | 'cancel', rememberChoice: boolean): void => {
     ipcRenderer.send('close-confirm-response', action, rememberChoice)
+  },
+
+  // ============ 自定义浏览器路径 ============
+
+  // 获取自定义浏览器路径
+  getCustomBrowserPath: (): Promise<string> => {
+    return ipcRenderer.invoke('get-custom-browser-path')
+  },
+
+  // 设置自定义浏览器路径
+  setCustomBrowserPath: (path: string): Promise<{ success: boolean; error?: string }> => {
+    return ipcRenderer.invoke('set-custom-browser-path', path)
+  },
+
+  // 使用自定义浏览器打开 URL
+  openWithCustomBrowser: (url: string, browserPath?: string): Promise<{ success: boolean; error?: string }> => {
+    return ipcRenderer.invoke('open-with-custom-browser', url, browserPath)
   }
 }
 

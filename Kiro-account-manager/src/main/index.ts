@@ -140,6 +140,48 @@ export function getUseKProxyForApi(): boolean {
   return useKProxyForApi
 }
 
+// 自定义浏览器路径配置
+let customBrowserPath: string = '' // 自定义浏览器可执行文件路径
+
+export function setCustomBrowserPath(path: string): void {
+  customBrowserPath = path
+  console.log(`[Browser] Custom browser path set to: ${path}`)
+}
+
+export function getCustomBrowserPath(): string {
+  return customBrowserPath
+}
+
+// 使用自定义浏览器打开 URL
+function openWithCustomBrowser(url: string, browserPath?: string): { success: boolean; error?: string } {
+  const pathToUse = browserPath || customBrowserPath
+  if (!pathToUse) {
+    return { success: false, error: 'Custom browser path not configured' }
+  }
+
+  console.log(`[Browser] Opening with custom browser: ${pathToUse} ${url}`)
+
+  try {
+    // 使用 spawn 启动浏览器，避免阻塞主进程
+    const { spawn } = require('child_process')
+
+    // 处理路径中的空格和特殊字符
+    const browserExecutable = pathToUse.includes(' ') ? `"${pathToUse}"` : pathToUse
+
+    // 启动浏览器（detached 模式，不阻塞主进程）
+    spawn(browserExecutable, [url], {
+      detached: true,
+      stdio: 'ignore',
+      shell: true
+    }).unref()
+
+    return { success: true }
+  } catch (error) {
+    console.error(`[Browser] Failed to open with custom browser:`, error)
+    return { success: false, error: String(error) }
+  }
+}
+
 // 获取 K-Proxy 代理 agent（如果启用）
 function getKProxyAgent(): ProxyAgent | undefined {
   if (!useKProxyForApi) return undefined
@@ -1302,6 +1344,20 @@ async function saveShortcutSettings(): Promise<void> {
   }
 }
 
+// 加载自定义浏览器路径
+async function loadCustomBrowserPath(): Promise<void> {
+  try {
+    await initStore()
+    const saved = store?.get('customBrowserPath') as string | undefined
+    if (saved) {
+      customBrowserPath = saved
+      console.log(`[Browser] Loaded custom browser path: ${customBrowserPath}`)
+    }
+  } catch (error) {
+    console.error('[Browser] Failed to load custom browser path:', error)
+  }
+}
+
 // 注册显示主窗口的快捷键
 function registerShowWindowShortcut(): void {
   // 先注销所有已注册的快捷键
@@ -1643,6 +1699,9 @@ app.whenReady().then(async () => {
   // 加载托盘设置并初始化托盘
   await loadTraySettings()
   initTray()
+
+  // 加载自定义浏览器路径
+  await loadCustomBrowserPath()
 
   // 初始化自动更新（仅生产环境）
   if (!is.dev) {
@@ -4570,6 +4629,28 @@ app.whenReady().then(async () => {
       store.set('useKProxyForApi', enabled)
     }
     return { success: true, enabled }
+  })
+
+  // ============ 自定义浏览器路径 IPC ============
+
+  // IPC: 获取自定义浏览器路径
+  ipcMain.handle('get-custom-browser-path', () => {
+    return getCustomBrowserPath()
+  })
+
+  // IPC: 设置自定义浏览器路径
+  ipcMain.handle('set-custom-browser-path', (_event, path: string) => {
+    setCustomBrowserPath(path)
+    // 保存到 store
+    if (store) {
+      store.set('customBrowserPath', path)
+    }
+    return { success: true }
+  })
+
+  // IPC: 使用自定义浏览器打开 URL
+  ipcMain.handle('open-with-custom-browser', (_event, url: string, browserPath?: string) => {
+    return openWithCustomBrowser(url, browserPath)
   })
 
   // IPC: 更新反代服务器配置

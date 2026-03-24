@@ -162,6 +162,39 @@ export function SettingsPage() {
   const [shortcutError, setShortcutError] = useState('')
   const [isRecordingShortcut, setIsRecordingShortcut] = useState(false)
 
+  // 自定义浏览器路径状态
+  const [customBrowserPath, setCustomBrowserPath] = useState('')
+  const [savedCustomBrowserPath, setSavedCustomBrowserPath] = useState('')
+  const [customBrowserPathLoading, setCustomBrowserPathLoading] = useState(true)
+
+  // 加载自定义浏览器路径
+  useEffect(() => {
+    const loadCustomBrowserPath = async () => {
+      try {
+        const path = await window.api.getCustomBrowserPath()
+        setCustomBrowserPath(path || '')
+        setSavedCustomBrowserPath(path || '')
+      } catch (error) {
+        console.error('Failed to load custom browser path:', error)
+      } finally {
+        setCustomBrowserPathLoading(false)
+      }
+    }
+    loadCustomBrowserPath()
+  }, [])
+
+  // 保存自定义浏览器路径
+  const handleCustomBrowserPathSave = async () => {
+    try {
+      const result = await window.api.setCustomBrowserPath(customBrowserPath)
+      if (result.success) {
+        setSavedCustomBrowserPath(customBrowserPath)
+      }
+    } catch (error) {
+      console.error('Failed to save custom browser path:', error)
+    }
+  }
+
   // 加载快捷键设置
   useEffect(() => {
     const loadShortcut = async () => {
@@ -525,6 +558,39 @@ export function SettingsPage() {
               <UserX className="h-4 w-4 mr-2" />
               {loginPrivateMode ? (isEn ? 'On' : '已开启') : (isEn ? 'Off' : '已关闭')}
             </Button>
+          </div>
+          <div className="pt-2 border-t">
+            <div className="mb-2">
+              <p className="font-medium">{isEn ? 'Custom Browser Path' : '自定义浏览器路径'}</p>
+              <p className="text-sm text-muted-foreground">{isEn ? 'Path to custom browser executable (e.g., Camoufox)' : '自定义浏览器可执行文件路径（如 Camoufox）'}</p>
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                className="flex-1 h-9 px-3 rounded-lg border bg-background text-sm font-mono focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                placeholder={isEn ? 'e.g., C:\\path\\to\\camoufox.exe or /usr/bin/camoufox' : '例如: C:\\path\\to\\camoufox.exe 或 /usr/bin/camoufox'}
+                value={customBrowserPath}
+                onChange={(e) => setCustomBrowserPath(e.target.value)}
+                onBlur={handleCustomBrowserPathSave}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleCustomBrowserPathSave()
+                  }
+                }}
+              />
+              {customBrowserPath !== savedCustomBrowserPath && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCustomBrowserPathSave}
+                >
+                  {isEn ? 'Save' : '保存'}
+                </Button>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {isEn ? 'Configure to use custom browser for online login' : '配置后，在线登录时可选择使用此浏览器'}
+            </p>
           </div>
         </CardContent>
       </Card>
